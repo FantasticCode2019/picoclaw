@@ -696,7 +696,8 @@ type SkillsRegistriesConfig struct {
 }
 
 type SkillsGithubConfig struct {
-	Token string `json:"token"`
+	Token string `json:"token,omitempty" env:"PICOCLAW_TOOLS_SKILLS_GITHUB_AUTH_TOKEN"`
+	Proxy string `json:"proxy,omitempty" env:"PICOCLAW_TOOLS_SKILLS_GITHUB_PROXY"`
 }
 
 type ClawHubRegistryConfig struct {

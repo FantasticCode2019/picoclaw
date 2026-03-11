@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -13,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sipeed/picoclaw/pkg/fileutil"
 	"github.com/sipeed/picoclaw/pkg/utils"
 )
 
@@ -26,72 +24,95 @@ type GitHubContent struct {
 	URL         string `json:"url"` // API URL for subdirectories
 }
 
+// GitHubRef represents a parsed GitHub reference
+type GitHubRef struct {
+	Owner    string // Repository owner
+	RepoName string // Repository name
+	Ref      string // Git reference (branch, tag, or commit)
+	SubPath  string // Path within the repository
+}
+
 type SkillInstaller struct {
 	workspace   string
 	client      *http.Client
 	githubToken string
+	proxy       string
 }
 
-func NewSkillInstaller(workspace string, githubToken string) *SkillInstaller {
+// NewSkillInstaller creates a new skill installer.
+// proxy is an optional HTTP/HTTPS/SOCKS5 proxy URL for downloading skills.
+func NewSkillInstaller(workspace, githubToken, proxy string) (*SkillInstaller, error) {
+	client, err := utils.CreateHTTPClient(proxy, 15*time.Second)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
+	}
+
 	return &SkillInstaller{
 		workspace:   workspace,
-		client:      &http.Client{Timeout: 15 * time.Second},
+		client:      client,
 		githubToken: githubToken,
-	}
+		proxy:       proxy,
+	}, nil
 }
 
 // parseGitHubRef parses a GitHub reference.
 // Supports: "owner/repo", "owner/repo/path", or full URL like "https://github.com/owner/repo/tree/ref/path"
-func parseGitHubRef(repo string) (owner, repoName, ref, subPath string, err error) {
+func parseGitHubRef(repo string) (GitHubRef, error) {
 	repo = strings.TrimSpace(repo)
 
 	// Handle full URL
 	if strings.HasPrefix(repo, "http://") || strings.HasPrefix(repo, "https://") {
 		u, err := url.Parse(repo)
 		if err != nil {
-			return "", "", "", "", fmt.Errorf("invalid URL: %w", err)
+			return GitHubRef{}, fmt.Errorf("invalid URL: %w", err)
 		}
 		parts := strings.Split(strings.Trim(u.Path, "/"), "/")
 		if len(parts) < 2 {
-			return "", "", "", "", fmt.Errorf("invalid GitHub URL")
+			return GitHubRef{}, fmt.Errorf("invalid GitHub URL")
 		}
-		owner, repoName = parts[0], parts[1]
-		ref = "main"
+		ref := GitHubRef{
+			Owner:    parts[0],
+			RepoName: parts[1],
+			Ref:      "main",
+		}
 		// Look for /tree/ or /blob/ in the path
 		for i := 2; i < len(parts); i++ {
 			if parts[i] == "tree" || parts[i] == "blob" {
 				if i+1 < len(parts) {
-					ref = parts[i+1]
-					subPath = strings.Join(parts[i+2:], "/")
+					ref.Ref = parts[i+1]
+					ref.SubPath = strings.Join(parts[i+2:], "/")
 				}
 				break
 			}
 		}
-		return owner, repoName, ref, subPath, nil
+		return ref, nil
 	}
 
 	// Handle shorthand format
 	parts := strings.Split(strings.Trim(repo, "/"), "/")
 	if len(parts) < 2 {
-		return "", "", "", "", fmt.Errorf("invalid format %q: expected 'owner/repo'", repo)
+		return GitHubRef{}, fmt.Errorf("invalid format %q: expected 'owner/repo'", repo)
 	}
-	owner, repoName = parts[0], parts[1]
-	ref = "main"
+	ref := GitHubRef{
+		Owner:    parts[0],
+		RepoName: parts[1],
+		Ref:      "main",
+	}
 	if len(parts) > 2 {
-		subPath = strings.Join(parts[2:], "/")
+		ref.SubPath = strings.Join(parts[2:], "/")
 	}
-	return owner, repoName, ref, subPath, nil
+	return ref, nil
 }
 
 func (si *SkillInstaller) InstallFromGitHub(ctx context.Context, repo string) error {
-	owner, repoName, ref, subPath, err := parseGitHubRef(repo)
+	ref, err := parseGitHubRef(repo)
 	if err != nil {
 		return err
 	}
 
-	skillName := repoName
-	if subPath != "" {
-		skillName = filepath.Base(subPath)
+	skillName := ref.RepoName
+	if ref.SubPath != "" {
+		skillName = filepath.Base(ref.SubPath)
 	}
 	skillDirectory := filepath.Join(si.workspace, "skills", skillName)
 
@@ -100,15 +121,15 @@ func (si *SkillInstaller) InstallFromGitHub(ctx context.Context, repo string) er
 	}
 
 	// Build GitHub API URL
-	apiPath := path.Join(owner, repoName, "contents")
-	if subPath != "" {
-		apiPath = path.Join(apiPath, subPath)
+	apiPath := path.Join(ref.Owner, ref.RepoName, "contents")
+	if ref.SubPath != "" {
+		apiPath = path.Join(apiPath, ref.SubPath)
 	}
-	apiURL := fmt.Sprintf("https://api.github.com/repos/%s?ref=%s", apiPath, ref)
+	apiURL := fmt.Sprintf("https://api.github.com/repos/%s?ref=%s", apiPath, ref.Ref)
 
 	if err := si.getGithubDirAllFiles(ctx, apiURL, skillDirectory, true); err != nil {
 		// Fallback to raw download
-		return si.downloadRaw(ctx, owner, repoName, ref, subPath, skillDirectory)
+		return si.downloadRaw(ctx, ref.Owner, ref.RepoName, ref.Ref, ref.SubPath, skillDirectory)
 	}
 
 	if _, err := os.Stat(filepath.Join(skillDirectory, "SKILL.md")); err != nil {
@@ -179,20 +200,12 @@ func (si *SkillInstaller) downloadRaw(ctx context.Context, owner, repo, ref, sub
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
-	resp, err := utils.DoRequestWithRetry(si.client, req)
+	// Use chunked download to temporary file.
+	tmpPath, err := utils.DownloadToFile(ctx, si.client, req, 0)
 	if err != nil {
 		return fmt.Errorf("failed to fetch skill: %w", err)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("failed to fetch skill: HTTP %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response: %w", err)
-	}
+	defer os.Remove(tmpPath)
 
 	if err := os.MkdirAll(localDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create skill directory: %w", err)
@@ -200,12 +213,12 @@ func (si *SkillInstaller) downloadRaw(ctx context.Context, owner, repo, ref, sub
 
 	localPath := filepath.Join(localDir, "SKILL.md")
 
-	// Use unified atomic write utility with explicit sync for flash storage reliability.
-	if err := fileutil.WriteFileAtomic(localPath, body, 0o600); err != nil {
+	// Atomic move from temp to final location.
+	if err := os.Rename(tmpPath, localPath); err != nil {
 		return fmt.Errorf("failed to write skill file: %w", err)
 	}
 
-	return nil
+	return os.Chmod(localPath, 0o600)
 }
 
 func (si *SkillInstaller) downloadFile(ctx context.Context, url, localPath string) error {
@@ -214,26 +227,23 @@ func (si *SkillInstaller) downloadFile(ctx context.Context, url, localPath strin
 		return err
 	}
 
-	resp, err := utils.DoRequestWithRetry(si.client, req)
+	// Use chunked download to temporary file, then move atomically to target.
+	tmpPath, err := utils.DownloadToFile(ctx, si.client, req, 0)
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("HTTP %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
+	defer os.Remove(tmpPath)
 
 	if err := os.MkdirAll(filepath.Dir(localPath), 0o755); err != nil {
 		return err
 	}
 
-	return fileutil.WriteFileAtomic(localPath, body, 0o600)
+	// Atomic move from temp to final location.
+	if err := os.Rename(tmpPath, localPath); err != nil {
+		return fmt.Errorf("failed to move downloaded file: %w", err)
+	}
+
+	return os.Chmod(localPath, 0o600)
 }
 
 // shouldDownload determines if a file should be downloaded
