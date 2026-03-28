@@ -407,7 +407,7 @@ func (h *Handler) startGatewayLocked(initialStatus string, existingPid int) (int
 	gateway.logs.Reset()
 
 	// Ensure Pico Channel is configured before starting gateway
-	if _, err := h.ensurePicoChannel(""); err != nil {
+	if _, err := h.EnsurePicoChannel(""); err != nil {
 		logger.ErrorC("gateway", fmt.Sprintf("Warning: failed to ensure pico channel: %v", err))
 		// Non-fatal: gateway can still start without pico channel
 	}
@@ -730,8 +730,8 @@ func (h *Handler) gatewayStatusData() map[string]any {
 		gateway.mu.Unlock()
 		logger.ErrorC("gateway", fmt.Sprintf("Gateway health check failed: %v", err))
 	} else {
-		logger.InfoC("gateway", fmt.Sprintf("Gateway health status: %d", statusCode))
 		if statusCode != http.StatusOK {
+			logger.WarnC("gateway", fmt.Sprintf("Gateway health status: %d", statusCode))
 			gateway.mu.Lock()
 			setGatewayRuntimeStatusLocked("error")
 			gateway.mu.Unlock()

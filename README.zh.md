@@ -18,7 +18,7 @@
     <a href="https://discord.gg/V4sAZ9XWpN"><img src="https://img.shields.io/badge/Discord-Community-4c60eb?style=flat&logo=discord&logoColor=white" alt="Discord"></a>
   </p>
 
-**中文** | [日本語](README.ja.md) | [Português](README.pt-br.md) | [Tiếng Việt](README.vi.md) | [Français](README.fr.md) | [Italiano](README.it.md) | [Bahasa Indonesia](README.id.md) | [English](README.md)
+**中文** | [日本語](README.ja.md) | [Português](README.pt-br.md) | [Tiếng Việt](README.vi.md) | [Français](README.fr.md) | [Italiano](README.it.md) | [Bahasa Indonesia](README.id.md) | [Malay](README.my.md) | [English](README.md)
 
 </div>
 
@@ -56,16 +56,18 @@
 
 ## 📢 新闻
 
+2026-03-25 🚀 **v0.2.4 发布！** Agent 架构全面重构（SubTurn、Hook、Steering、EventBus）、微信/企业微信深度集成、安全体系升级（.security.yml、敏感数据过滤）、新增 Provider（AWS Bedrock、Azure、小米 MiMo），以及 35 项 Bug 修复。PicoClaw 已达 **26K ⭐**！
+
 2026-03-17 🚀 **v0.2.3 发布！** 系统托盘 UI（Windows & Linux）、子 Agent 状态查询 (`spawn_status`)、实验性 Gateway 热重载、Cron 安全门控，以及 2 项安全修复。PicoClaw 已达 **25K ⭐**！
 
 2026-03-09 🎉 **v0.2.1 — 史上最大更新！** MCP 协议支持、4 个新频道 (Matrix/IRC/WeCom/Discord Proxy)、3 个新 Provider (Kimi/Minimax/Avian)、视觉管线、JSONL 记忆存储、模型路由。
 
 2026-02-28 📦 **v0.2.0** 发布，支持 Docker Compose 和 Web UI 启动器。
 
-2026-02-26 🎉 PicoClaw 仅 17 天突破 **20K Stars**！频道自动编排和能力接口上线。
-
 <details>
 <summary>更早的新闻...</summary>
+
+2026-02-26 🎉 PicoClaw 仅 17 天突破 **20K Stars**！频道自动编排和能力接口上线。
 
 2026-02-16 🎉 PicoClaw 一周内突破 12K Stars！社区维护者角色和 [路线图](ROADMAP.md) 正式发布。
 
@@ -254,6 +256,29 @@ docker compose -f docker/docker-compose.yml --profile launcher up -d
 
 </details>
 
+<details>
+<summary><b>macOS — 首次启动安全警告</b></summary>
+
+macOS 可能会在首次启动时拦截 `picoclaw-launcher`，因为它从互联网下载，未经 Mac App Store 公证。
+
+**第一步：** 双击 `picoclaw-launcher`，会出现安全警告：
+
+<p align="center">
+<img src="assets/macos-gatekeeper-warning.jpg" alt="macOS Gatekeeper 警告" width="400">
+</p>
+
+> *"picoclaw-launcher" 无法打开 — Apple 无法验证 "picoclaw-launcher" 不含可能损害 Mac 或危及隐私的恶意软件。*
+
+**第二步：** 打开**系统设置** → **隐私与安全性** → 向下滚动找到**安全性**部分 → 点击**仍要打开** → 在弹窗中再次点击**打开**。
+
+<p align="center">
+<img src="assets/macos-gatekeeper-allow.jpg" alt="macOS 隐私与安全性 — 仍要打开" width="600">
+</p>
+
+完成这一次操作后，后续启动 `picoclaw-launcher` 将不再弹出警告。
+
+</details>
+
 ### 💻 TUI Launcher（推荐无头环境 / SSH）
 
 TUI（终端 UI）Launcher 提供功能完整的终端配置与管理界面，适合服务器、树莓派等无显示器环境。
@@ -367,6 +392,7 @@ PicoClaw 通过 `model_list` 配置支持 30+ LLM Provider，使用 `协议/模�
 | [NVIDIA NIM](https://build.nvidia.com/) | `nvidia/` | 必填 | NVIDIA 托管模型 |
 | [Cerebras](https://cloud.cerebras.ai/) | `cerebras/` | 必填 | 快速推理 |
 | [Novita AI](https://novita.ai/) | `novita/` | 必填 | 多种开源模型 |
+| [小米 MiMo](https://platform.xiaomimimo.com/) | `mimo/` | 必填 | MiMo 系列模型 |
 | [Ollama](https://ollama.com/) | `ollama/` | 无需 | 本地模型，自托管 |
 | [vLLM](https://docs.vllm.ai/) | `vllm/` | 无需 | 本地部署，兼容 OpenAI |
 | [LiteLLM](https://docs.litellm.ai/) | `litellm/` | 视情况 | 100+ Provider 代理 |
@@ -423,9 +449,7 @@ PicoClaw 通过 `model_list` 配置支持 30+ LLM Provider，使用 `协议/模�
 | **钉钉** | 中等（client credentials） | Stream | [指南](docs/channels/dingtalk/README.zh.md) |
 | **飞书 / Lark** | 中等（App ID + Secret） | WebSocket/SDK | [指南](docs/channels/feishu/README.zh.md) |
 | **LINE** | 中等（credentials + webhook） | Webhook | [指南](docs/channels/line/README.zh.md) |
-| **企业微信机器人** | 中等（webhook URL） | Webhook | [指南](docs/channels/wecom/wecom_bot/README.zh.md) |
-| **企业微信应用** | 中等（corp credentials） | Webhook | [指南](docs/channels/wecom/wecom_app/README.zh.md) |
-| **企业微信 AI 机器人** | 中等（token + AES key） | WebSocket / Webhook | [指南](docs/channels/wecom/wecom_aibot/README.zh.md) |
+| **企业微信** | 简单（扫码登录或手动配置） | WebSocket | [指南](docs/channels/wecom/README.zh.md) |
 | **IRC** | 中等（server + nick） | IRC 协议 | [指南](docs/zh/chat-apps.md#irc) |
 | **OneBot** | 中等（WebSocket URL） | OneBot v11 | [指南](docs/channels/onebot/README.zh.md) |
 | **MaixCam** | 简单（启用即可） | TCP socket | [指南](docs/channels/maixcam/README.zh.md) |
@@ -520,7 +544,7 @@ PicoClaw 原生支持 [MCP](https://modelcontextprotocol.io/) — 连接任意 M
 | 命令                       | 说明                   |
 | ------------------------- | ---------------------- |
 | `picoclaw onboard`        | 初始化配置与工作区       |
-| `picoclaw onboard weixin` | 扫码连接微信个人号 |
+| `picoclaw auth weixin` | 扫码连接微信个人号 |
 | `picoclaw agent -m "..."` | 与 Agent 对话           |
 | `picoclaw agent`          | 交互式对话模式           |
 | `picoclaw gateway`        | 启动网关                |

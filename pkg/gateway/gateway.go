@@ -20,7 +20,6 @@ import (
 	_ "github.com/sipeed/picoclaw/pkg/channels/irc"
 	_ "github.com/sipeed/picoclaw/pkg/channels/line"
 	_ "github.com/sipeed/picoclaw/pkg/channels/maixcam"
-	_ "github.com/sipeed/picoclaw/pkg/channels/matrix"
 	_ "github.com/sipeed/picoclaw/pkg/channels/onebot"
 	_ "github.com/sipeed/picoclaw/pkg/channels/pico"
 	_ "github.com/sipeed/picoclaw/pkg/channels/qq"
@@ -491,11 +490,12 @@ func restartServices(
 	}
 	al.SetMediaStore(runningServices.MediaStore)
 
-	runningServices.ChannelManager, err = channels.NewManager(cfg, msgBus, runningServices.MediaStore)
-	if err != nil {
-		return fmt.Errorf("error recreating channel manager: %w", err)
-	}
 	al.SetChannelManager(runningServices.ChannelManager)
+
+	if err = runningServices.ChannelManager.Reload(context.Background(), cfg); err != nil {
+		return fmt.Errorf("error reload channels: %w", err)
+	}
+	fmt.Println("  ✓ Channels restarted.")
 
 	enabledChannels := runningServices.ChannelManager.GetEnabledChannels()
 	if len(enabledChannels) > 0 {
@@ -503,18 +503,6 @@ func restartServices(
 	} else {
 		fmt.Println("  ⚠ Warning: No channels enabled")
 	}
-
-	addr := fmt.Sprintf("%s:%d", cfg.Gateway.Host, cfg.Gateway.Port)
-	// Reuse existing HealthServer to preserve reloadFunc
-	if runningServices.HealthServer == nil {
-		runningServices.HealthServer = health.NewServer(cfg.Gateway.Host, cfg.Gateway.Port)
-	}
-	runningServices.ChannelManager.SetupHTTPServer(addr, runningServices.HealthServer)
-
-	if err = runningServices.ChannelManager.Reload(context.Background(), cfg); err != nil {
-		return fmt.Errorf("error reload channels: %w", err)
-	}
-	fmt.Println("  ✓ Channels restarted.")
 
 	stateManager := state.NewManager(cfg.WorkspacePath())
 	runningServices.DeviceService = devices.NewService(devices.Config{

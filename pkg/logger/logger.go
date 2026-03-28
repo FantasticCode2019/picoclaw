@@ -2,6 +2,7 @@ package logger
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -100,6 +101,12 @@ func SetConsoleLevel(level LogLevel) {
 	logger = logger.Level(level)
 }
 
+func DisableConsole() {
+	mu.Lock()
+	defer mu.Unlock()
+	logger = zerolog.New(io.Discard).With().Timestamp().Caller().Logger()
+}
+
 func GetLevel() LogLevel {
 	mu.RLock()
 	defer mu.RUnlock()
@@ -168,6 +175,22 @@ func DisableFileLogging() {
 		logFile = nil
 	}
 	fileLogger = zerolog.Logger{}
+}
+
+func ConfigureFromEnv() {
+	if logFile := os.Getenv("PICOCLAW_LOG_FILE"); logFile != "" {
+		if strings.HasPrefix(logFile, "~/") {
+			if home := os.Getenv("HOME"); home != "" {
+				logFile = filepath.Join(home, logFile[2:])
+			}
+		}
+
+		if err := EnableFileLogging(logFile); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to enable file logging: %v\n", err)
+		} else {
+			DisableConsole()
+		}
+	}
 }
 
 func getCallerSkip() int {
@@ -328,6 +351,10 @@ func WarnF(message string, fields map[string]any) {
 
 func WarnCF(component string, message string, fields map[string]any) {
 	logMessage(WARN, component, message, fields)
+}
+
+func Warnf(message string, ss ...any) {
+	logMessage(WARN, "", fmt.Sprintf(message, ss...), nil)
 }
 
 func Error(message string) {
